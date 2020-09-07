@@ -35,7 +35,7 @@ def main():
     # L4
     parser.add_argument('--sport', type=int, help="Source Port number", default=-1)
     parser.add_argument('--dport', type=int, help="Destination Port number", default=-1)
-    parser.add_argument('--port', type=int, help="Start Src Port number", default=1)
+    parser.add_argument('--port', type=int, help="Start Src Port number (source port will be changed if this field is configured)", default=1)
     parser.add_argument('--proto', type=int, help="Specify L4 Protocol, UDP: 17(default), TCP: 6. (Other will be 'Unknown')", default=17)
     # optional
     # parser.add_argument('--payload', help="Enable customized payload content.", action="store_true")
@@ -55,6 +55,8 @@ def main():
     sport = args.sport
     dport = args.dport
     start_port = args.port
+    if start_port > 0: # disable source port (because user want to send N packets which start from "start_port")
+        sport = -1
     proto = args.proto
     l4_proto = [None] * 255
     l4_proto[17] = "UDP"
@@ -105,6 +107,7 @@ def main():
         print "{} {}".format("Source Port number:".ljust(loff, ' '), (str(sport).rjust(roff, ' ') if sport > 0 else str(start_port).rjust(roff, ' ')))
         print "{} {}".format("Destination Port number:".ljust(loff, ' '), (str(dport).rjust(roff, ' ') if dport > 0 else "Not specified".rjust(roff, ' ')))
         print "{} {}".format("Start Src port number:".ljust(loff, ' '), str(start_port).rjust(roff, ' '))
+        print "{} {}".format("Stable port: ".ljust(loff, ' '), str(keep).rjust(roff, ' '))
     print "Sending mode=================================================="
     print modes[mode]
     print "Payload ======================================================"
