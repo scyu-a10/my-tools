@@ -107,7 +107,6 @@ def main():
         print "{} {}".format("Source Port number:".ljust(loff, ' '), (str(sport).rjust(roff, ' ') if sport > 0 else str(start_port).rjust(roff, ' ')))
         print "{} {}".format("Destination Port number:".ljust(loff, ' '), (str(dport).rjust(roff, ' ') if dport > 0 else "Not specified".rjust(roff, ' ')))
         print "{} {}".format("Start Src port number:".ljust(loff, ' '), str(start_port).rjust(roff, ' '))
-        print "{} {}".format("Stable port: ".ljust(loff, ' '), str(keep).rjust(roff, ' '))
     print "Sending mode=================================================="
     print modes[mode]
     print "Payload ======================================================"
