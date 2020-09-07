@@ -33,12 +33,22 @@ def main():
     parser.add_argument('--dipv6', type=str, help="Destination IPv6 address (only enable when ip version = 6)", default="2001:20:20:101::226")
     parser.add_argument('--gwv6', type=str, help="Setup Default gateway address (v6, only enable when ip version = 6)", default="2001:20:20:20::1")
     # L4
-    parser.add_argument('--sport', type=int, help="Source Port number", default=-1)
-    parser.add_argument('--dport', type=int, help="Destination Port number", default=-1)
-    parser.add_argument('--port', type=int, help="Start Src Port number (source port will be changed if this field is configured)", default=1)
+    """
+        Notice:
+            If --sport / --dport not specified, it will use value from --port as source / destination port.
+            For example:
+            1) Sending ipv6 udp traffic for 10 UDP packets from port 1000 to 1009 (N == 10), both source and dest port want to change:
+                ./myhping.py --num 10 --port 1000 --proto 17 --mode 0 (or --mode 2) ...
+            2) Sending ipv6 udp traffic for 10 UDP packets, only source port want to be ranged from 1000 to 1009, and dest port = 5000:
+                ./myhping.py --num 10 --port 1000 --dport 5000 --proto 17 --mode 0 (or --mode 2) ...
+            3) Sending ipv6 udp traffic for 10 UDP packets with same source and dest port = 5000:
+                ./myhping.py --num 10 --sport 5000 --dport 5000 --proto 17 ...
+    """
+    parser.add_argument('--sport', type=int, help="Specify Source Port number (default: use 'Start Src Port')", default=-1)
+    parser.add_argument('--dport', type=int, help="Specify Destination Port number (default: use 'Start Src Port')", default=-1)
+    parser.add_argument('--port', type=int, help="Default Start Port number (default: 1)", default=1)
     parser.add_argument('--proto', type=int, help="Specify L4 Protocol, UDP: 17(default), TCP: 6. (Other will be 'Unknown')", default=17)
     # optional
-    # parser.add_argument('--payload', help="Enable customized payload content.", action="store_true")
     parser.add_argument('--payload-len', type=int, help="Total length of payload filled with 'A'.", default=0)
     parser.add_argument('--payload-content', type=str, help="Customized Payload content (disable --payload-len)", default="")
 
@@ -55,8 +65,6 @@ def main():
     sport = args.sport
     dport = args.dport
     start_port = args.port
-    if start_port > 0: # disable source port (because user want to send N packets which start from "start_port")
-        sport = -1
     proto = args.proto
     l4_proto = [None] * 255
     l4_proto[17] = "UDP"
