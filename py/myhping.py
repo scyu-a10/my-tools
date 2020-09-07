@@ -8,8 +8,8 @@ from scapy.all import *
 g_port_max = 65535
 g_eth_ipv4 = 0x0800
 g_eth_ipv6 = 0x86DD
-g_l4_udp = 0
-g_l4_tcp = 1
+g_l4_udp = 17
+g_l4_tcp = 6
 
 # printing format offset
 loff = 30
@@ -21,9 +21,9 @@ def main():
     # program parameter config
     parser.add_argument('--intf', type=str, help="Sending interface (default=ens19)", default="ens19")
     parser.add_argument('--num', type=int, help="Send total N packets (default=1)", default=1)
-    parser.add_argument('--ipv', type=int, help="IP version (4 or 6)", default=6)
+    parser.add_argument('--ipv', type=int, help="IP version (4 or 6, default=6)", default=6)
     parser.add_argument('--mode', type=int, help="Set mode (0=iterative, 1=random, 2=slow)", default=0)
-    parser.add_argument('--use-gw', help="Use Gateway as dmac", action="store_true")
+    parser.add_argument('--use-gw', help="Use Gateway's mac as dmac instead of getmacbyip(dip)/getmacbyip6(dip)", action="store_true")
     # L3 (v4)
     parser.add_argument('--sip', type=str, help="Source IP address", default="20.20.20.225")
     parser.add_argument('--dip', type=str, help="Destination IP address", default="20.20.101.226")
@@ -36,7 +36,7 @@ def main():
     parser.add_argument('--sport', type=int, help="Source Port number", default=-1)
     parser.add_argument('--dport', type=int, help="Destination Port number", default=-1)
     parser.add_argument('--port', type=int, help="Start Src Port number", default=1)
-    parser.add_argument('--proto', type=int, help="Specify L4 Protocol, UDP: 0(default), TCP: 1.", default=0, choices=range(0, 2))
+    parser.add_argument('--proto', type=int, help="Specify L4 Protocol, UDP: 17(default), TCP: 6. (Other will be 'Unknown')", default=17)
     # optional
     # parser.add_argument('--payload', help="Enable customized payload content.", action="store_true")
     parser.add_argument('--payload-len', type=int, help="Total length of payload filled with 'A'.", default=0)
@@ -56,10 +56,13 @@ def main():
     dport = args.dport
     start_port = args.port
     proto = args.proto
-    l4_proto = ["UDP", "TCP"]
+    l4_proto = [None] * 255
+    l4_proto[17] = "UDP"
+    l4_proto[6] = "TCP"
+    if proto > 255: # invalid parameter, exit program
+        sys.exit("Invalid l4 protocol (Exceed valid range: {})".format(proto))
     if l4_proto[proto] == None:
-        print "Invalid l4 protocol, use UDP (default)"
-        proto = 0
+        print "Unsupported l4 protocol, use payload-content as L4 header & payload"
     mode = args.mode
     modes = [
         "Send packet with linearly increasing port.",
@@ -97,10 +100,11 @@ def main():
     print "{} {}".format("IP version:".ljust(loff, ' '), str(ip_ver).rjust(roff, ' '))
     print "{} {}".format("Source IP address:".ljust(loff, ' '), src_addr.rjust(roff, ' '))
     print "{} {}".format("Destination IP address:".ljust(loff, ' '), dst_addr.rjust(roff, ' '))
-    print "{} {}".format("L4 Protocol:".ljust(loff, ' '), l4_proto[proto].rjust(roff, ' '))
-    print "{} {}".format("Source Port number:".ljust(loff, ' '), (str(sport).rjust(roff, ' ') if sport > 0 else str(start_port).rjust(roff, ' ')))
-    print "{} {}".format("Destination Port number:".ljust(loff, ' '), (str(dport).rjust(roff, ' ') if dport > 0 else "Not specified".rjust(roff, ' ')))
-    print "{} {}".format("Start Src port number:".ljust(loff, ' '), str(start_port).rjust(roff, ' '))
+    print "{} {}".format("L4 Protocol:".ljust(loff, ' '), l4_proto[proto].rjust(roff, ' ') if l4_proto[proto] is not None else "Unknown".rjust(roff, ' '))
+    if l4_proto[proto] is not None:
+        print "{} {}".format("Source Port number:".ljust(loff, ' '), (str(sport).rjust(roff, ' ') if sport > 0 else str(start_port).rjust(roff, ' ')))
+        print "{} {}".format("Destination Port number:".ljust(loff, ' '), (str(dport).rjust(roff, ' ') if dport > 0 else "Not specified".rjust(roff, ' ')))
+        print "{} {}".format("Start Src port number:".ljust(loff, ' '), str(start_port).rjust(roff, ' '))
     print "Sending mode=================================================="
     print modes[mode]
     print "Payload ======================================================"
@@ -112,60 +116,79 @@ def main():
         payload = "A" * payload_len
         print "{} {}".format("Payload length: ".ljust(loff, ' '), str(payload_len).rjust(roff, ' '))
     print "Static config================================================="
-    print "{} {}[{}]".format("Default Gateway:".ljust(loff, ' '), gateway.rjust(roff, ' '), "enable" if args.use_gw is True else "disable")
+    print "{} {}[{}]".format("Default Gateway:".ljust(loff, ' '), gateway.rjust(roff, ' '), "custom" if args.use_gw is True else "default")
     #print "Added route: [GW={}, Prefix={}, Dev={}]".format(gateway, prefix, iface)
     print "Packet out===================================================="
     print "Sending on interface {}({} -> {}) to IPv{} addr {}".format(iface, smac, dmac, ip_ver, str(dst_addr))
 
-
-    for i in range(args.num):
-        if args.mode is 0:
-            src_port = sport if sport > 0 else (i + start_port)%g_port_max
-            dst_port = dport if dport > 0 else (i + start_port)%g_port_max
-        elif args.mode is 1:
-            src_port = sport if sport > 0 else random.randint(start_port, g_port_max)
-            dst_port = dport if dport > 0 else random.randint(start_port, g_port_max)
-        else:
-            src_port = sport if sport > 0 else (i + start_port)%g_port_max
-            dst_port = dport if dport > 0 else (i + start_port)%g_port_max
-            pkt = None
+    if l4_proto[proto] is not None:
+        for i in range(args.num):
+            if mode is 0:
+                src_port = sport if sport > 0 else (i + start_port)%g_port_max
+                dst_port = dport if dport > 0 else (i + start_port)%g_port_max
+            elif mode is 1:
+                src_port = sport if sport > 0 else random.randint(start_port, g_port_max)
+                dst_port = dport if dport > 0 else random.randint(start_port, g_port_max)
+            else:
+                src_port = sport if sport > 0 else (i + start_port)%g_port_max
+                dst_port = dport if dport > 0 else (i + start_port)%g_port_max
+                pkt = None
+                udp = UDP(sport=src_port, dport=dst_port)
+                tcp = TCP(sport=src_port, dport=dst_port)
+                if ip_ver == 4:
+                    if proto is g_l4_udp:
+                        pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
+                              IP(src=src_addr, dst=dst_addr)/udp/payload)
+                    elif proto is g_l4_tcp:
+                        pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
+                              IP(src=src_addr, dst=dst_addr)/tcp/payload)
+                else:
+                    if proto is g_l4_udp:
+                        pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
+                              IPv6(src=src_addr, dst=dst_addr)/udp/payload)
+                    elif proto is g_l4_tcp:
+                        pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
+                              IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
+                # send packet slowly
+                sendp(pkt, iface=iface, inter=1)
+                continue
             udp = UDP(sport=src_port, dport=dst_port)
             tcp = TCP(sport=src_port, dport=dst_port)
             if ip_ver == 4:
                 if proto is g_l4_udp:
-                    pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
-                          IP(src=src_addr, dst=dst_addr)/udp/payload)
+                    l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
+                            IP(src=src_addr, dst=dst_addr)/udp/payload)
                 elif proto is g_l4_tcp:
-                    pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
-                          IP(src=src_addr, dst=dst_addr)/tcp/payload)
+                    l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
+                            IP(src=src_addr, dst=dst_addr)/tcp/payload)
             else:
                 if proto is g_l4_udp:
-                    pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
-                          IPv6(src=src_addr, dst=dst_addr)/udp/payload)
+                    l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
+                            IPv6(src=src_addr, dst=dst_addr)/udp/payload)
                 elif proto is g_l4_tcp:
+                    l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
+                            IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
+            # send packet with high speed
+            s.send(l2pkt)
+    else:
+        # unknown L4 protocol, no port
+        for i in range(args.num):
+            if mode > 1:
+                if ip_ver == 4:
+                    pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
+                          IP(src=src_addr, dst=dst_addr, proto=proto)/payload)
+                else:
                     pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
-                          IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
-            # send packet slowly
-            sendp(pkt, iface=iface, inter=1)
-            continue
-        udp = UDP(sport=src_port, dport=dst_port)
-        tcp = TCP(sport=src_port, dport=dst_port)
-        if ip_ver == 4:
-            if proto is g_l4_udp:
-                l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
-                        IP(src=src_addr, dst=dst_addr)/udp/payload)
-            elif proto is g_l4_tcp:
-                l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
-                        IP(src=src_addr, dst=dst_addr)/tcp/payload)
-        else:
-            if proto is g_l4_udp:
-                l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
-                        IPv6(src=src_addr, dst=dst_addr)/udp/payload)
-            elif proto is g_l4_tcp:
-                l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
-                        IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
-        # send packet with high speed
-        s.send(l2pkt)
+                          IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload)
+                sendp(pkt, iface=iface, inter=1)
+            else:
+                if ip_ver == 4:
+                    l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
+                            IP(src=src_addr, dst=dst_addr, proto=proto)/payload)
+                else:
+                    l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
+                            IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload)
+                s.send(l2pkt)
 
     print "=============================================================="
     print("Total packets: ", args.num)
