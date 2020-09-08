@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--ipv', type=int, help="IP version (4 or 6, default=6)", default=6)
     parser.add_argument('--mode', type=int, help="Set mode (0=iterative, 1=random, 2=slow)", default=0)
     parser.add_argument('--use-gw', help="Use Gateway's mac as dmac instead of getmacbyip(dip)/getmacbyip6(dip)", action="store_true")
+    parser.add_argument('--debug', help="Enter debug mode, just print configuration without sending real traffic.", action="store_true")
     # L3 (v4)
     parser.add_argument('--sip', type=str, help="Source IP address", default="20.20.20.225")
     parser.add_argument('--dip', type=str, help="Destination IP address", default="20.20.101.226")
@@ -59,6 +60,7 @@ def main():
     # get value for arguments
     iface = args.intf
     ip_ver = args.ipv
+    debug = args.debug
     src_addr = args.sip if ip_ver == 4 else args.sipv6
     dst_addr = args.dip if ip_ver == 4 else args.dipv6
     gateway = args.gw if ip_ver == 4 else args.gwv6
@@ -129,7 +131,12 @@ def main():
     print "{} {}[{}]".format("Default Gateway:".ljust(loff, ' '), gateway.rjust(roff, ' '), "custom" if args.use_gw is True else "default")
     #print "Added route: [GW={}, Prefix={}, Dev={}]".format(gateway, prefix, iface)
     print "Packet out===================================================="
-    print "Sending on interface {}({} -> {}) to IPv{} addr {}".format(iface, smac, dmac, ip_ver, str(dst_addr))
+    print "Sending on interface {}({} -> {}), IPv{}".format(iface, smac, dmac, ip_ver)
+    print "[{}] {}:{} -> {}:{}".format(l4_proto[proto] if l4_proto[proto] is not None else "Unknown", str(src_addr), sport, str(dst_addr), dport)
+
+    if debug is True:
+        print "Not send any traffic (debug mode)."
+        sys.exit(0)
 
     if l4_proto[proto] is not None:
         for i in range(args.num):
