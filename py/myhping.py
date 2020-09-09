@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--mode', type=int, help="Set mode (0=iterative, 1=random, 2=slow)", default=0)
     parser.add_argument('--use-gw', help="Use Gateway's mac as dmac instead of getmacbyip(dip)/getmacbyip6(dip)", action="store_true")
     parser.add_argument('--debug', help="Enter debug mode, just print configuration without sending real traffic.", action="store_true")
+    parser.add_argument('--answer', help="Wait for responses, not just send out this packets.", action="store_true")
     # L3 (v4)
     parser.add_argument('--sip', type=str, help="Source IP address", default="20.20.20.225")
     parser.add_argument('--dip', type=str, help="Destination IP address", default="20.20.101.226")
@@ -45,22 +46,21 @@ def main():
             3) Sending ipv6 udp traffic for 10 UDP packets with same source and dest port = 5000:
                 ./myhping.py --num 10 --sport 5000 --dport 5000 --proto 17 ...
     """
-    parser.add_argument('--sport', type=int, help="Specify Source Port number (default: use 'Start Src Port')", default=-1)
-    parser.add_argument('--dport', type=int, help="Specify Destination Port number (default: use 'Start Src Port')", default=-1)
+    parser.add_argument('--sport', type=int, help="Specify Source Port number (default: use 'Start Port')", default=-1)
+    parser.add_argument('--dport', type=int, help="Specify Destination Port number (default: use 'Start Port')", default=-1)
     parser.add_argument('--port', type=int, help="Default Start Port number (default: 1)", default=1)
     parser.add_argument('--proto', type=int, help="Specify L4 Protocol, UDP: 17(default), TCP: 6. (Other will be 'Unknown')", default=17)
     # optional
     parser.add_argument('--payload-len', type=int, help="Total length of payload filled with 'A'.", default=0)
     parser.add_argument('--payload-content', type=str, help="Customized Payload content (disable --payload-len)", default="")
 
-
     # parse
     args = parser.parse_args()
-
     # get value for arguments
     iface = args.intf
     ip_ver = args.ipv
     debug = args.debug
+    answer = args.answer
     src_addr = args.sip if ip_ver == 4 else args.sipv6
     dst_addr = args.dip if ip_ver == 4 else args.dipv6
     gateway = args.gw if ip_ver == 4 else args.gwv6
@@ -167,7 +167,10 @@ def main():
                         pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                               IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
                 # send packet slowly
-                sendp(pkt, iface=iface, inter=1)
+                if answer is True:
+                    srp(pkt, iface=iface, timeout=1)
+                else:
+                    sendp(pkt, iface=iface, inter=1)
                 continue
             udp = UDP(sport=src_port, dport=dst_port)
             tcp = TCP(sport=src_port, dport=dst_port)
@@ -186,7 +189,10 @@ def main():
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                             IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
             # send packet with high speed
-            s.send(l2pkt)
+            if answer is True:
+                s.sr(l2pkt, timeout=1)
+            else:
+                s.send(l2pkt)
     else:
         # unknown L4 protocol, no port
         for i in range(args.num):
@@ -197,7 +203,10 @@ def main():
                 else:
                     pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                           IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload)
-                sendp(pkt, iface=iface, inter=1)
+                if answer is True:
+                    srp(pkt, iface=iface, timeout=1)
+                else:
+                    sendp(pkt, iface=iface, inter=1)
             else:
                 if ip_ver == 4:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
@@ -205,7 +214,10 @@ def main():
                 else:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                             IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload)
-                s.send(l2pkt)
+                if answer is True:
+                    s.sr(l2pkt, timeout=1)
+                else:
+                    s.send(l2pkt)
 
     print "=============================================================="
     print("Total packets: ", args.num)
