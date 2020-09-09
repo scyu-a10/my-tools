@@ -10,6 +10,7 @@ g_eth_ipv4 = 0x0800
 g_eth_ipv6 = 0x86DD
 g_l4_udp = 17
 g_l4_tcp = 6
+g_l4_icmp = 1
 
 # printing format offset
 loff = 30
@@ -26,6 +27,7 @@ def main():
     parser.add_argument('--use-gw', help="Use Gateway's mac as dmac instead of getmacbyip(dip)/getmacbyip6(dip)", action="store_true")
     parser.add_argument('--debug', help="Enter debug mode, just print configuration without sending real traffic.", action="store_true")
     parser.add_argument('--answer', help="Wait for responses, not just send out this packets.", action="store_true")
+    parser.add_argument('--timeout', type=int, help="Timeout for waiting response", default=2)
     # L3 (v4)
     parser.add_argument('--sip', type=str, help="Source IP address", default="20.20.20.225")
     parser.add_argument('--dip', type=str, help="Destination IP address", default="20.20.101.226")
@@ -61,6 +63,7 @@ def main():
     ip_ver = args.ipv
     debug = args.debug
     answer = args.answer
+    timeout = args.timeout
     src_addr = args.sip if ip_ver == 4 else args.sipv6
     dst_addr = args.dip if ip_ver == 4 else args.dipv6
     gateway = args.gw if ip_ver == 4 else args.gwv6
@@ -138,6 +141,14 @@ def main():
         print "Not send any traffic (debug mode)."
         sys.exit(0)
 
+    total_answer_dict = {
+        'ip': 0,
+        'ipv6': 0,
+        'tcp': 0,
+        'udp': 0,
+        'icmp': 0
+    }
+
     if l4_proto[proto] is not None:
         for i in range(args.num):
             if mode is 0:
@@ -168,9 +179,11 @@ def main():
                               IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
                 # send packet slowly
                 if answer is True:
-                    srp(pkt, iface=iface, timeout=1)
+                    ans, unans = srp(pkt, iface=iface, timeout=timeout, verbose=False)
                 else:
-                    sendp(pkt, iface=iface, inter=1)
+                    sendp(pkt, iface=iface, inter=timeout, verbose=False)
+                # need to add here because this mode will continue
+                parse_ans(total_answer_dict, ans)
                 continue
             udp = UDP(sport=src_port, dport=dst_port)
             tcp = TCP(sport=src_port, dport=dst_port)
@@ -190,9 +203,11 @@ def main():
                             IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
             # send packet with high speed
             if answer is True:
-                s.sr(l2pkt, timeout=1)
+                ans, unans = s.sr(l2pkt, timeout=timeout, verbose=False)
             else:
-                s.send(l2pkt)
+                s.send(l2pkt, verbose=False)
+            # parse answer for mode < 2
+            parse_ans(total_answer_dict, ans)
     else:
         # unknown L4 protocol, no port
         for i in range(args.num):
@@ -204,9 +219,9 @@ def main():
                     pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                           IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload)
                 if answer is True:
-                    srp(pkt, iface=iface, timeout=1)
+                    ans, unans = srp(pkt, iface=iface, timeout=timeout, verbose=False)
                 else:
-                    sendp(pkt, iface=iface, inter=1)
+                    sendp(pkt, iface=iface, inter=1, verbose=False)
             else:
                 if ip_ver == 4:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
@@ -215,12 +230,43 @@ def main():
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                             IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload)
                 if answer is True:
-                    s.sr(l2pkt, timeout=1)
+                    ans, unans = s.sr(l2pkt, timeout=timeout, verbose=False)
                 else:
-                    s.send(l2pkt)
+                    s.send(l2pkt, verbose=False)
+        # in for-loop
+        parse_ans(total_answer_dict, ans)
 
     print "=============================================================="
-    print("Total packets: ", args.num)
+    print "Total sent packets: {}".format(args.num)
+    if answer is True:
+        print "Total answered packets: "
+        print "L3 stats:"
+        print " {} {}".format("IP:".ljust(7, ' '), total_answer_dict['ip'])
+        print " {} {}".format("IPv6:".ljust(7, ' '), total_answer_dict['ipv6'])
+        print "L4 stats:"
+        print " {} {}".format("TCP:".ljust(7, ' '), total_answer_dict['tcp'])
+        print " {} {}".format("UDP:".ljust(7, ' '), total_answer_dict['udp'])
+        print " {} {}".format("ICMP:".ljust(7, ' '), total_answer_dict['icmp'])
+
+def parse_ans(total_answer_dict, answer):
+    for snd, rcv in answer:
+        if rcv.type == g_eth_ipv4:
+            total_answer_dict['ip'] = total_answer_dict['ip'] + 1
+            if rcv[IP].proto == g_l4_udp:
+                total_answer_dict['udp'] = total_answer_dict['udp'] + 1
+            elif rcv[IP].proto == g_l4_tcp:
+                total_answer_dict['tcp'] = total_answer_dict['tcp'] + 1
+            elif rcv[IP].proto == g_l4_icmp:
+                total_answer_dict['icmp'] = total_answer_dict['icmp'] + 1
+        elif rcv.type == g_eth_ipv6:
+            total_answer_dict['ipv6'] = total_answer_dict['ipv6'] + 1
+            if rcv[IPv6].nh == g_l4_udp:
+                total_answer_dict['udp'] = total_answer_dict['udp'] + 1
+            elif rcv[IPv6].nh == g_l4_tcp:
+                total_answer_dict['tcp'] = total_answer_dict['tcp'] + 1
+            elif rcv[IPv6].proto == g_l4_icmp:
+                total_answer_dict['icmp'] = total_answer_dict['icmp'] + 1
+
 
 if __name__=='__main__':
     main()
