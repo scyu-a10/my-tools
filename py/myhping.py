@@ -95,10 +95,24 @@ def main():
     #conf.route6.resync()
     #conf.route6.add(dst="55aa::/96", gw=gateway, dev=iface)
 
-    s = conf.L2socket(iface)
-    smac = get_if_hwaddr(iface)
+    """
+        Handle interface type is "tunnel" (e.g. ds-lite), using L3socket instead.
+        Setup:
+            - s (socket instance)
+            - smac (source mac addr, will be use by L2 send)
+            - use_l3_sock (flag, use to distinguish which socket we should use)
+    """
     dmac = ""
+    try:
+        s = conf.L2socket(iface)
+        smac = get_if_hwaddr(iface)
+        use_l3_sock = 0
+    except:
+        s = conf.L3socket(iface)
+        smac = ""
+        use_l3_sock = 1
 
+    # Get dmac address from getmacbyip/getmacbyipv6, with dst_addr or gateway
     if ip_ver == 4:
         dmac = getmacbyip(ip=dst_addr) if args.use_gw is False else getmacbyip(ip=gateway)
         if dmac is None:
@@ -169,23 +183,33 @@ def main():
                 tcp = TCP(sport=src_port, dport=dst_port)
                 if ip_ver == 4:
                     if proto is g_l4_udp:
-                        pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
+                        l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
                               IP(src=src_addr, dst=dst_addr)/udp/payload)
+                        l3pkt = IP(src=src_addr, dst=dst_addr)/udp/payload
                     elif proto is g_l4_tcp:
-                        pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
+                        l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
                               IP(src=src_addr, dst=dst_addr)/tcp/payload)
+                        l3pkt = IP(src=src_addr, dst=dst_addr)/tcp/payload
                 else:
                     if proto is g_l4_udp:
-                        pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
+                        l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                               IPv6(src=src_addr, dst=dst_addr)/udp/payload)
+                        l3pkt = IPv6(src=src_addr, dst=dst_addr)/udp/payload
                     elif proto is g_l4_tcp:
-                        pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
+                        l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                               IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
+                        l3pkt = IPv6(src=src_addr, dst=dst_addr)/tcp/payload
                 # send packet slowly
                 if answer is True:
-                    ans, unans = srp(pkt, iface=iface, timeout=timeout, verbose=False)
+                    if use_l3_sock is 1:
+                        ans, unans = sr(l3pkt, iface=iface, timeout=timeout, verbose=False)
+                    else:
+                        ans, unans = srp(l2pkt, iface=iface, timeout=timeout, verbose=False)
                 else:
-                    sendp(pkt, iface=iface, inter=timeout, verbose=False)
+                    if use_l3_sock is 1:
+                        send(l3pkt, iface=iface, inter=timeout, verbose=False)
+                    else:
+                        sendp(l2pkt, iface=iface, inter=timeout, verbose=False)
                 # need to add here because this mode will continue
                 if answer is True:
                     parse_ans(total_answer_dict, ans)
@@ -198,51 +222,80 @@ def main():
                 if proto is g_l4_udp:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
                             IP(src=src_addr, dst=dst_addr)/udp/payload)
+                    l3pkt = IP(src=src_addr, dst=dst_addr)/udp/payload
                 elif proto is g_l4_tcp:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
                             IP(src=src_addr, dst=dst_addr)/tcp/payload)
+                    l3pkt = IP(src=src_addr, dst=dst_addr)/tcp/payload
             else:
                 if proto is g_l4_udp:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                             IPv6(src=src_addr, dst=dst_addr)/udp/payload)
+                    l3pkt = IPv6(src=src_addr, dst=dst_addr)/udp/payload
                 elif proto is g_l4_tcp:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                             IPv6(src=src_addr, dst=dst_addr)/tcp/payload)
+                    l3pkt = IPv6(src=src_addr, dst=dst_addr)/tcp/payload
             # send packet with high speed
             if answer is True:
-                ans, unans = s.sr(l2pkt, timeout=timeout, verbose=False)
+                if use_l3_sock is 1:
+                    ans, unans = s.sr(l3pkt, timeout=timeout, verbose=False)
+                else:
+                    ans, unans = s.sr(l2pkt, timeout=timeout, verbose=False)
             else:
-                s.send(l2pkt)
+                if use_l3_sock is 1:
+                    s.send(l3pkt)
+                else:
+                    s.send(l2pkt)
             # parse answer for mode < 2
             if answer is True:
                 parse_ans(total_answer_dict, ans)
             # record port-pair
             port_pair.append({'src': src_port, 'dst': dst_port})
     else:
-        # unknown L4 protocol, no port
+        """
+            Unknown L4 protocol, no port
+            - TODO: support use_l3_sock
+        """
         for i in range(args.num):
             if mode > 1:
                 if ip_ver == 4:
                     pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
                           IP(src=src_addr, dst=dst_addr, proto=proto)/payload)
+                    l3pkt = IP(src=src_addr, dst=dst_addr, proto=proto)/payload
                 else:
                     pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                           IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload)
+                    l3pkt = IPv6(src=src_addr, dst=dst_addr, proto=proto)/payload
                 if answer is True:
-                    ans, unans = srp(pkt, iface=iface, timeout=timeout, verbose=False)
+                    if use_l3_sock is 1:
+                        ans, unans = sr(l3pkt, iface=iface, timeout=timeout, verbose=False)
+                    else:
+                        ans, unans = srp(pkt, iface=iface, timeout=timeout, verbose=False)
                 else:
-                    sendp(pkt, iface=iface, inter=1, verbose=False)
+                    if use_l3_sock is 1:
+                        send(l3pkt, iface=iface, inter=1, verbose=False)
+                    else:
+                        sendp(pkt, iface=iface, inter=1, verbose=False)
             else:
                 if ip_ver == 4:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv4)/
                             IP(src=src_addr, dst=dst_addr, proto=proto)/payload)
+                    l3pkt = IP(src=src_addr, dst=dst_addr, proto=proto)/payload
                 else:
                     l2pkt = (Ether(src=smac, dst=dmac, type=g_eth_ipv6)/
                             IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload)
+                    l3pkt = IPv6(src=src_addr, dst=dst_addr, nh=proto)/payload
                 if answer is True:
-                    ans, unans = s.sr(l2pkt, timeout=timeout, verbose=False)
+                    if use_l3_sock is 1:
+                        ans, unans = s.sr(l3pkt, timeout=timeout, verbose=False)
+                    else:
+                        ans, unans = s.sr(l2pkt, timeout=timeout, verbose=False)
                 else:
-                    s.send(l2pkt)
+                    if use_l3_sock is 1:
+                        s.send(l3pkt)
+                    else:
+                        s.send(l2pkt)
             # in for-loop
             if answer is True:
                 parse_ans(total_answer_dict, ans)
