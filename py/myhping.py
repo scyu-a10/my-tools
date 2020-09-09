@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--debug', help="Enter debug mode, just print configuration without sending real traffic.", action="store_true")
     parser.add_argument('--answer', help="Wait for responses, not just send out this packets.", action="store_true")
     parser.add_argument('--timeout', type=int, help="Timeout for waiting response", default=2)
+    parser.add_argument('--verbose', help="Verbose mode (More detail info).", action="store_true")
     # L3 (v4)
     parser.add_argument('--sip', type=str, help="Source IP address", default="20.20.20.225")
     parser.add_argument('--dip', type=str, help="Destination IP address", default="20.20.101.226")
@@ -64,6 +65,7 @@ def main():
     debug = args.debug
     answer = args.answer
     timeout = args.timeout
+    verbose = args.verbose
     src_addr = args.sip if ip_ver == 4 else args.sipv6
     dst_addr = args.dip if ip_ver == 4 else args.dipv6
     gateway = args.gw if ip_ver == 4 else args.gwv6
@@ -135,7 +137,7 @@ def main():
     #print "Added route: [GW={}, Prefix={}, Dev={}]".format(gateway, prefix, iface)
     print "Packet out===================================================="
     print "Sending on interface {}({} -> {}), IPv{}".format(iface, smac, dmac, ip_ver)
-    print "[{}] {}:{} -> {}:{}".format(l4_proto[proto] if l4_proto[proto] is not None else "Unknown", str(src_addr), sport, str(dst_addr), dport)
+    print "[{}] {} -> {}".format(l4_proto[proto] if l4_proto[proto] is not None else "Unknown", str(src_addr), str(dst_addr))
 
     if debug is True:
         print "Not send any traffic (debug mode)."
@@ -148,6 +150,8 @@ def main():
         'udp': 0,
         'icmp': 0
     }
+
+    port_pair = []
 
     if l4_proto[proto] is not None:
         for i in range(args.num):
@@ -183,7 +187,10 @@ def main():
                 else:
                     sendp(pkt, iface=iface, inter=timeout, verbose=False)
                 # need to add here because this mode will continue
-                parse_ans(total_answer_dict, ans)
+                if answer is True:
+                    parse_ans(total_answer_dict, ans)
+                # record port-pair
+                port_pair.append({'src': src_port, 'dst': dst_port})
                 continue
             udp = UDP(sport=src_port, dport=dst_port)
             tcp = TCP(sport=src_port, dport=dst_port)
@@ -205,9 +212,12 @@ def main():
             if answer is True:
                 ans, unans = s.sr(l2pkt, timeout=timeout, verbose=False)
             else:
-                s.send(l2pkt, verbose=False)
+                s.send(l2pkt)
             # parse answer for mode < 2
-            parse_ans(total_answer_dict, ans)
+            if answer is True:
+                parse_ans(total_answer_dict, ans)
+            # record port-pair
+            port_pair.append({'src': src_port, 'dst': dst_port})
     else:
         # unknown L4 protocol, no port
         for i in range(args.num):
@@ -232,12 +242,18 @@ def main():
                 if answer is True:
                     ans, unans = s.sr(l2pkt, timeout=timeout, verbose=False)
                 else:
-                    s.send(l2pkt, verbose=False)
-        # in for-loop
-        parse_ans(total_answer_dict, ans)
+                    s.send(l2pkt)
+            # in for-loop
+            if answer is True:
+                parse_ans(total_answer_dict, ans)
 
     print "=============================================================="
     print "Total sent packets: {}".format(args.num)
+    if verbose is True and len(port_pair) > 0:
+        print "Verbose Info=================================================="
+        for pair in port_pair:
+            print "{}:{} -> {}:{}".format(src_addr, pair['src'], dst_addr, pair['dst'])
+        print "=============================================================="
     if answer is True:
         print "Total answered packets: "
         print "L3 stats:"
@@ -247,6 +263,7 @@ def main():
         print " {} {}".format("TCP:".ljust(7, ' '), total_answer_dict['tcp'])
         print " {} {}".format("UDP:".ljust(7, ' '), total_answer_dict['udp'])
         print " {} {}".format("ICMP:".ljust(7, ' '), total_answer_dict['icmp'])
+    print "=============================================================="
 
 def parse_ans(total_answer_dict, answer):
     for snd, rcv in answer:
