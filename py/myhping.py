@@ -127,27 +127,28 @@ def main():
 
     # print status info
     print "=============================================================="
-    print "{} {}".format("Interface:".ljust(loff, ' '), iface.rjust(roff, ' '))
-    print "{} {}".format("IP version:".ljust(loff, ' '), str(ip_ver).rjust(roff, ' '))
-    print "{} {}".format("Source IP address:".ljust(loff, ' '), src_addr.rjust(roff, ' '))
-    print "{} {}".format("Destination IP address:".ljust(loff, ' '), dst_addr.rjust(roff, ' '))
-    print "{} {}".format("L4 Protocol:".ljust(loff, ' '), l4_proto[proto].rjust(roff, ' ') if l4_proto[proto] is not None else "Unknown".rjust(roff, ' '))
+    print "{:<{}} {:>{}}".format("Interface:", loff, iface, roff)
+    print "{:<{}} {:>{}}".format("IP version:", loff, ip_ver, roff)
+    print "{:<{}} {:>{}}".format("Source IP address:", loff, src_addr, roff)
+    print "{:<{}} {:>{}}".format("Destination IP address:", loff, dst_addr, roff)
+    print "{:<{}} {:>{}}".format("L4 Protocol:", loff, l4_proto[proto] if l4_proto[proto] is not None else "Unknown", roff)
     if l4_proto[proto] is not None:
-        print "{} {}".format("Source Port number:".ljust(loff, ' '), (str(sport).rjust(roff, ' ') if sport > 0 else str(start_port).rjust(roff, ' ')))
-        print "{} {}".format("Destination Port number:".ljust(loff, ' '), (str(dport).rjust(roff, ' ') if dport > 0 else "Not specified".rjust(roff, ' ')))
-        print "{} {}".format("Start Src port number:".ljust(loff, ' '), str(start_port).rjust(roff, ' '))
+        print "{:<{}} {:>{}}".format("Source Port number:", loff, sport if sport > 0 else start_port, roff)
+        print "{:<{}} {:>{}}".format("Destination Port number:", loff, dport if dport > 0 else "Not specified", roff)
+        print "{:<{}} {:>{}}".format("Start Src port number:", loff, start_port, roff)
     print "Sending mode=================================================="
-    print modes[mode]
+    if sport < 0 and dport < 0:
+        print modes[mode]
     print "Payload ======================================================"
-    print "{} {}".format("Customized payload: ".ljust(loff, ' '), "enable".rjust(roff, ' ') if payload_len > 0 or len(payload_content) > 0 else "disable".rjust(roff, ' '))
+    print "{:<{}} {:>{}}".format("Customized payload: ", loff, "enable" if payload_len > 0 or len(payload_content) > 0 else "disable", roff)
     if len(payload_content) > 0:
         payload = payload_content
-        print "{} {}".format("Payload content: ".ljust(loff, ' '), payload_content.rjust(roff, ' '))
+        print "{:<{}} {:>{}}".format("Payload content: ", loff, payload_content, roff)
     else:
         payload = "A" * payload_len
-        print "{} {}".format("Payload length: ".ljust(loff, ' '), str(payload_len).rjust(roff, ' '))
+        print "{:<{}} {:>{}}".format("Payload length: ", loff, payload_len, roff)
     print "Static config================================================="
-    print "{} {}[{}]".format("Default Gateway:".ljust(loff, ' '), gateway.rjust(roff, ' '), "custom" if args.use_gw is True else "default")
+    print "{:<{}} {:>{}}[{}]".format("Default Gateway:", loff, gateway, roff, "custom" if args.use_gw is True else "default")
     #print "Added route: [GW={}, Prefix={}, Dev={}]".format(gateway, prefix, iface)
     print "Packet out===================================================="
     print "Sending on interface {}({} -> {}), IPv{}".format(iface, smac, dmac, ip_ver)
@@ -310,12 +311,12 @@ def main():
     if answer is True:
         print "Total answered packets: "
         print "L3 stats:"
-        print " {} {}".format("IP:".ljust(7, ' '), total_answer_dict['ip'])
-        print " {} {}".format("IPv6:".ljust(7, ' '), total_answer_dict['ipv6'])
+        print " {:<7} {}".format("IP:", total_answer_dict['ip'])
+        print " {:<7} {}".format("IPv6:", total_answer_dict['ipv6'])
         print "L4 stats:"
-        print " {} {}".format("TCP:".ljust(7, ' '), total_answer_dict['tcp'])
-        print " {} {}".format("UDP:".ljust(7, ' '), total_answer_dict['udp'])
-        print " {} {}".format("ICMP:".ljust(7, ' '), total_answer_dict['icmp'])
+        print " {:<7} {}".format("TCP:", total_answer_dict['tcp'])
+        print " {:<7} {}".format("UDP:", total_answer_dict['udp'])
+        print " {:<7} {}".format("ICMP:", total_answer_dict['icmp'])
     print "=============================================================="
 
 def parse_ans(total_answer_dict, answer):
