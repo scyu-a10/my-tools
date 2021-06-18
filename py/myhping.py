@@ -19,6 +19,16 @@ roff = 20
 def main():
     parser = argparse.ArgumentParser()
 
+    """
+        Usage:
+
+            1) IPv6 traffic with 1 UDP packet (src-port: 1000, dest-port: 80)
+
+            ./myhping.py --gwv6 <Your v6 Gateway> --sipv6 <Source v6 addr> --dipv6 <Dest v6 addr> --sport 1000 --dport 80 --num 1
+
+            2) IPv4
+    """
+
     # program parameter config
     parser.add_argument('--intf', type=str, help="Sending interface (default=ens19)", default="ens19")
     parser.add_argument('--num', type=int, help="Send total N packets (default=1)", default=1)
@@ -34,9 +44,9 @@ def main():
     parser.add_argument('--dip', type=str, help="Destination IP address", default="20.20.101.226")
     parser.add_argument('--gw', type=str, help="Setup Default gateway address", default="20.20.20.1")
     # L3 (v6)
-    parser.add_argument('--sipv6', type=str, help="Source IPv6 address (only enable when ip version = 6)", default="2001:20:20:20::225")
-    parser.add_argument('--dipv6', type=str, help="Destination IPv6 address (only enable when ip version = 6)", default="2001:20:20:101::226")
-    parser.add_argument('--gwv6', type=str, help="Setup Default gateway address (v6, only enable when ip version = 6)", default="2001:20:20:20::1")
+    parser.add_argument('--sipv6', type=str, help="Source IPv6 address (only enable when ip version = 6)", default="2061::20.20.20.225")
+    parser.add_argument('--dipv6', type=str, help="Destination IPv6 address (only enable when ip version = 6)", default="2061::20.20.101.226")
+    parser.add_argument('--gwv6', type=str, help="Setup Default gateway address (v6, only enable when ip version = 6)", default="2061::20.20.20.3")
     # L4
     """
         Notice:
